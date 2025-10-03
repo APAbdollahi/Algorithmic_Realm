@@ -42,10 +42,11 @@ class SocialMediaSimulatorV4:
         # Likes count
         self.post_likes = {1: 1, -1: 1} # Start with 1 to avoid division by zero
 
+    # --- THE DEFINITIVE FIX: Use .copy() to prevent mutating historical state ---
     def load_state(self, opinions, post_likes):
         """Loads a previous state to run a simulation from that point."""
-        self.opinions = opinions
-        self.post_likes = post_likes
+        self.opinions = opinions.copy()
+        self.post_likes = post_likes.copy()
 
     def run_single_cycle(self, record_edges=False):
         """Simulates one cycle. If record_edges is True, it stores the communication graph."""
@@ -86,6 +87,9 @@ class SocialMediaSimulatorV4:
         if num_viewers > len(possible_viewer_indices) or num_viewers == 0:
             return []
         if post_type == 0:
+            # Add a check to prevent requesting more samples than available
+            if num_viewers > len(possible_viewer_indices):
+                num_viewers = len(possible_viewer_indices)
             return np.random.choice(possible_viewer_indices, size=num_viewers, replace=False)
 
         total_likes = self.post_likes[1] + self.post_likes[-1]
@@ -133,12 +137,13 @@ def run_full_simulation(params, num_cycles):
     sim = SocialMediaSimulatorV4(params)
     
     history_stats = [sim.get_opinion_stats()]
-    history_states = [{'opinions': copy.deepcopy(sim.opinions), 'post_likes': copy.deepcopy(sim.post_likes)}]
+    history_states = [{'opinions': sim.opinions.copy(), 'post_likes': sim.post_likes.copy()}]
 
     for i in range(num_cycles):
         sim.run_single_cycle()
         history_stats.append(sim.get_opinion_stats())
-        history_states.append({'opinions': copy.deepcopy(sim.opinions), 'post_likes': copy.deepcopy(sim.post_likes)})
+        # Use .copy() here as well for absolute safety
+        history_states.append({'opinions': sim.opinions.copy(), 'post_likes': sim.post_likes.copy()})
         
     return pd.DataFrame(history_stats), history_states
 
@@ -173,26 +178,18 @@ run_button = st.sidebar.button("Run Simulation", type="primary")
 
 # --- Main Page Logic ---
 
-# Initialize session state if it doesn't exist
 if 'simulation_has_run' not in st.session_state:
     st.session_state.simulation_has_run = False
-    st.session_state.history_df = None
-    st.session_state.history_states = None
-    st.session_state.params = {}
-    st.session_state.num_cycles = 0
-
-# The button click updates the state and triggers the simulation run
 if run_button:
     st.session_state.simulation_has_run = True
     st.session_state.params = params
     st.session_state.num_cycles = num_cycles
     
     with st.spinner('The Algorithmic Realm is shaping reality...'):
-        df, states = run_full_simulation(st.session_state.params, st.session_state.num_cycles)
+        df, states = run_full_simulation(params, num_cycles)
         st.session_state.history_df = df
         st.session_state.history_states = states
 
-# The display logic only executes if a simulation has been run
 if st.session_state.simulation_has_run:
     df = st.session_state.history_df
     history_states = st.session_state.history_states
@@ -241,20 +238,21 @@ if st.session_state.simulation_has_run:
         node_colors = {1: '#007bff', -1: '#ffa500'}
         for node_id in sampled_nodes:
             opinion = int(current_opinions[node_id])
-            net.add_node(int(node_id), label=str(node_id), color=node_colors[opinion], title=f"Opinion: {opinion}")
+            color = node_colors.get(opinion, '#808080') # Default to grey if opinion is not 1 or -1
+            net.add_node(int(node_id), label=str(node_id), color=color, title=f"Opinion: {opinion}")
         
         for u, v in temp_sim.last_cycle_edges:
             py_u, py_v = int(u), int(v)
             if py_u in sampled_nodes and py_v in sampled_nodes:
                 poster_opinion = int(current_opinions[py_u])
-                edge_color = node_colors[poster_opinion]
+                edge_color = node_colors.get(poster_opinion, '#808080')
                 net.add_edge(py_u, py_v, color=edge_color, width=0.5, title=f"Influence from {py_u} ({poster_opinion})")
         
         try:
-            path = '/tmp' # A temporary path for the HTML file
+            path = '/tmp'
             net.save_graph(f'{path}/pyvis_graph.html')
-            HtmlFile = open(f'{path}/pyvis_graph.html', 'r', encoding='utf-8')
-            st.components.v1.html(HtmlFile.read(), height=800, scrolling=True)
+            with open(f'{path}/pyvis_graph.html', 'r', encoding='utf-8') as HtmlFile:
+                st.components.v1.html(HtmlFile.read(), height=800, scrolling=True)
         except Exception as e:
             st.error(f"Could not generate graph: {e}")
 else:

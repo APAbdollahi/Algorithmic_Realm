@@ -144,10 +144,10 @@ def run_full_simulation(params, num_cycles):
 
 # --- Streamlit GUI ---
 st.set_page_config(layout="wide")
-st.title("The Algorithmic Realm V4: The Time Machine")
+st.title("The Algorithmic Realm")
 
 # --- Sidebar Controls ---
-st.sidebar.header("Define the Laws of the Realm")
+st.sidebar.header("Define Parameters")
 params = {}
 params['N'] = st.sidebar.slider('N (Participants)', 100, 5000, 1000, 100)
 num_cycles = st.sidebar.slider('Number of Cycles', 5, 100, 30, 1)
